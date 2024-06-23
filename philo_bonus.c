@@ -6,13 +6,13 @@
 /*   By: mde-prin <mde-prin@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/06/18 08:45:24 by mde-prin          #+#    #+#             */
-/*   Updated: 2024/06/21 15:01:39 by mde-prin         ###   ########.fr       */
+/*   Updated: 2024/06/23 22:30:00 by zap              ###   ########.lu       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "philo_bonus.h"
 
-int	ft_atopi(const char *nptr)
+int	ft_atoui(const char *nptr)
 {
 	long	n;
 
@@ -28,35 +28,6 @@ int	ft_atopi(const char *nptr)
 	if (n > INT_MAX)
 		return (-1);
 	return ((int)n);
-}
-
-unsigned long	ft_strlen(const char *s)
-{
-	unsigned long	l;
-	if (!s)
-		return (0);
-	l = 0;
-	while (s[l])
-		l++;
-	return (l);
-}
-
-void	ft_putnbr(int n)
-{
-	long	nb;
-	char	c;
-
-	nb = (long)n;
-	if (nb < 0)
-	{
-		nb = -nb;
-		c = '-';
-		write(1, &c, 1);
-	}
-	if (nb > 9)
-		ft_putnbr(nb / 10);
-	c ='0' + nb % 10;
-	write(1, &c, 1);
 }
 
 long long	ft_time_ms(void)
@@ -80,7 +51,7 @@ int	ft_check(int argc, char *argv[], long long *args)
 	i = 0;
 	while (argv[i + 1])
 	{
-		args[i] = ft_atopi(argv[i + 1]);
+		args[i] = ft_atoui(argv[i + 1]);
 		if (args[i++] == -1 || args[0] == 0)
 			return (1);
 	}
@@ -138,15 +109,35 @@ void	ft_log(char *s, t_philo *philo)
 	long long	log_time;
 
 	log_time = ft_time_ms() - philo->start_time;
-	sem_wait(philo->sem_flag);
-	flag = philo->print;
-	sem_post(philo->sem_flag);
-	if (flag)
+	sem_wait(philo->sem_print);
+	printf("%lld %d %s\n", log_time, philo->id, s);
+	sem_post(philo->sem_print);
+}
+
+void	ft_eat_sleep_think(t_philo *philo)
+{
+	sem_wait(philo->sem_1);
+	sem_wait(philo->sem_fork);
+	ft_log("has taken a fork", philo);
+	sem_wait(philo->sem_2);
+	sem_wait(philo->sem_fork);
+	ft_log("has taken a fork", philo);
+	sem_post(philo->sem_2);
+	sem_post(philo->sem_1);
+	ft_log("is eating", philo);
+	philo->time_last_meal = ft_time_ms();
+	philo->nbr_must_eat -= (philo->nbr_must_eat > 0);
+	if (!philo->nbr_must_eat)
 	{
-		sem_wait(philo->sem_print);
-		printf("%lld %d %s\n", log_time, philo->id, s);
-		sem_post(philo->sem_print);
+		sem_post(philo->sem_full)
+		philo->nbr_must_eat = -1;
 	}
+	usleep(philo->time_to_eat * 1000);
+	sem_post(philo->sem_fork);
+	sem_post(philo->sem_fork);
+	ft_log("is sleeping", philo);
+	usleep(philo->time_to_sleep * 1000);
+	ft_log("is thinking", philo);
 }
 
 void	*ft_routine(void *arg)
@@ -155,29 +146,8 @@ void	*ft_routine(void *arg)
 
 	philo = (t_philo *)arg;
 	ft_log("is thinking", philo);
-	while (philo->nbr_must_eat)
-	{
-		sem_wait(philo->sem_1);
-		sem_wait(philo->sem_fork);
-		ft_log("has taken a fork", philo);
-		sem_wait(philo->sem_2);
-		sem_wait(philo->sem_fork);
-		ft_log("has taken a fork", philo);
-		sem_post(philo->sem_2);
-		sem_post(philo->sem_1);
-		ft_log("is eating", philo);
-		philo->time_last_meal = ft_time_ms();
-		philo->nbr_must_eat -= (philo->nbr_must_eat > 0);
-		usleep(philo->time_to_eat * 1000);
-		sem_post(philo->sem_fork);
-		sem_post(philo->sem_fork);
-		ft_log("is sleeping", philo);
-		usleep(philo->time_to_sleep * 1000);
-		ft_log("is thinking", philo);
-	}
-	sem_wait(philo->sem_flag);
-	philo->print = 0;
-	sem_post(philo->sem_flag);
+	while (!philo->end)
+		ft_eat_sleep_think(philo);
 	return (NULL);
 }
 
@@ -189,19 +159,8 @@ void	*ft_listen(void *arg)
 	philo = (t_philo *)arg;
 	sem_wait(philo->sem_dead);
 	sem_post(philo->sem_dead);
-	sem_wait(philo->sem_flag);
-	flag = philo->print;
-	sem_post(philo->sem_flag);
-	printf("FLAG = %d\n", flag);
-	sem_wait(philo->sem_flag);
-	philo->print = 0;
-	sem_post(philo->sem_flag);
-	if (!flag)
-			sem_post(philo->sem_print);
-	philo->nbr_must_eat = 0;
-	printf("FLAG 2= %d\n", flag);
-	//exit(0);
 }
+//printf("%lld %d died\n", ft_time_ms() - philo->start_time, philo->id);
 
 void	*ft_monitor(void *arg)
 {
@@ -210,26 +169,14 @@ void	*ft_monitor(void *arg)
 	int	i;
 
 	philo = (t_philo *)arg;
-	while (1)
+	while (!philo->end)
 	{
-		sem_wait(philo->sem_print);
 		if (ft_time_ms() >= philo->time_last_meal + philo->time_to_die)
 		{
-			sem_wait(philo->sem_flag);
-			flag = philo->print;
-			sem_post(philo->sem_flag);
-			if (flag)
-				printf("%lld %d died\n", ft_time_ms() - philo->start_time, philo->id);
-			else
-				sem_post(philo->sem_print);
-			sem_wait(philo->sem_flag);
-			philo->print = 0;
-			sem_post(philo->sem_flag);
-			i = 0;
+			ft_log("died", philo);
 			sem_post(philo->sem_dead);
 			return (NULL);
 		}
-		sem_post(philo->sem_print);
 		usleep(400);
 	}
 }
@@ -273,7 +220,7 @@ void	ft_start(long long args[])
 	philo.time_to_eat = args[2];
 	philo.time_to_sleep = args[3];
 	philo.nbr_must_eat = args[4];
-	philo.print = 1;
+	philo.end = 0;
 	philo.sem_1 = sem_1;
 	philo.sem_2 = sem_2;
 	philo.sem_fork = sem_fork;

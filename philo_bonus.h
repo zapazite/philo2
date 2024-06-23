@@ -6,7 +6,7 @@
 /*   By: mde-prin <mde-prin@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/06/18 09:09:28 by mde-prin          #+#    #+#             */
-/*   Updated: 2024/06/21 12:37:00 by mde-prin         ###   ########.fr       */
+/*   Updated: 2024/06/22 13:00:34 by zap              ###   ########.lu       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -25,7 +25,7 @@ typedef struct s_philo
 {
 	int				id;
 	int				dead;
-	int				print;
+	int				end;
 	int				nbr_philo;
 	int				nbr_must_eat;
 	sem_t			*sem_1;
